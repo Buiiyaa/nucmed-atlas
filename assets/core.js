@@ -67,9 +67,23 @@
     let html = '', para = [], list = '', fence = false, code = [];
     const flushP = () => { if (para.length) html += `<p>${inline(para.join(' '))}</p>`; para = []; };
     const closeList = () => { if (list) html += `</${list}>`; list = ''; };
-    for (const line of lines) {
+    const cells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(v => v.trim());
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
       if (/^```/.test(line)) { flushP(); closeList(); if (fence) { html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; code = []; } fence = !fence; continue; }
       if (fence) { code.push(line); continue; }
+      if (line.includes('|') && lines[lineIndex + 1] && /^\s*\|?\s*:?-{3,}:?\s*\|/.test(lines[lineIndex + 1])) {
+        flushP(); closeList();
+        const headings = cells(line);
+        html += `<div class="table-wrap" role="region" aria-label="Reference table" tabindex="0"><table><thead><tr>${headings.map(h=>`<th scope="col">${inline(h)}</th>`).join('')}</tr></thead><tbody>`;
+        lineIndex++;
+        while (lines[lineIndex + 1] && lines[lineIndex + 1].includes('|') && lines[lineIndex + 1].trim()) {
+          const row = cells(lines[++lineIndex]);
+          html += `<tr>${headings.map((_, n)=>`<td>${inline(row[n] || '')}</td>`).join('')}</tr>`;
+        }
+        html += '</tbody></table></div>';
+        continue;
+      }
       if (!line.trim()) { flushP(); closeList(); continue; }
       const h = line.match(/^#{1,4}\s+(.+)$/), ul = line.match(/^\s*[-*]\s+(.+)$/), ol = line.match(/^\s*\d+\.\s+(.+)$/), quote = line.match(/^>\s?(.*)$/);
       if (h) { flushP(); closeList(); html += `<h3>${inline(h[1])}</h3>`; }
@@ -125,7 +139,7 @@
     const reviewed = t.reviewedBy && t.reviewedOn;
     return `<div class="article-label">${esc(t.category)} <span> / </span> TOPIC NOTE</div>
       <h1 class="article-title">${esc(t.title)}</h1><p class="article-deck">${esc(t.summary)}</p>
-      <div class="article-meta"><span>${icon('clock')} Updated ${esc(date(t.updated))}</span><span class="review-label">${reviewed ? `Reviewed by ${esc(t.reviewedBy)} · ${esc(date(t.reviewedOn))}` : 'Introductory notes · Not clinically reviewed'}</span></div>
+      <div class="article-meta"><span>${icon('clock')} Updated ${esc(date(t.updated))}</span><span class="review-label">${reviewed ? `Reviewed by ${esc(t.reviewedBy)} · ${esc(date(t.reviewedOn))}` : 'AI-assisted study notes · Not independently clinically reviewed'}</span></div>
       <div class="article-rule"></div>
       ${t.sections.map((s, index) => `<section class="article-section" id="section-${esc(s.id)}"><div class="section-number">${String(index + 1).padStart(2,'0')}</div><div class="section-content"><h2>${esc(s.title)}</h2><div class="prose">${markdown(s.body)}</div>${s.images.map(i => `<figure><button class="image-open" type="button" data-image-src="${esc(resolveImage(i.src))}" data-image-alt="${esc(i.alt)}" data-image-caption="${esc(i.caption)}" aria-label="Enlarge image: ${esc(i.alt)}"><img src="${esc(resolveImage(i.src))}" alt="${esc(i.alt)}" loading="lazy"></button>${i.caption ? `<figcaption>${esc(i.caption)}</figcaption>` : ''}${i.credit ? `<div class="image-credit">${i.creditUrl && safeURL(i.creditUrl) ? `<a href="${esc(safeURL(i.creditUrl))}" target="_blank" rel="noopener noreferrer">${esc(i.credit)}</a>` : esc(i.credit)}</div>` : ''}</figure>`).join('')}</div></section>`).join('')}
       ${t.references.length ? `<section class="references" id="references"><div class="eyebrow">READ FURTHER</div><h2>Sources & references</h2><ol>${t.references.map((r,n) => `<li id="ref-${n+1}"><a href="${esc(safeURL(r.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(r.title)} ${icon('external')}</a></li>`).join('')}</ol></section>` : ''}
